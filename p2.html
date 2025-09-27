@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotional Code Commenter</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React and ReactDOM for component-based UI -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel for JSX transpilation in the browser -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-gray-900">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState } = React;
+
+        // Main App Component
+        const App = () => {
+            const [code, setCode] = useState(`function bubbleSort(arr) {
+    const n = arr.length;
+    for (let i = 0; i < n - 1; i++) {
+        for (let j = 0; j < n - i - 1; j++) {
+            if (arr[j] > arr[j + 1]) {
+                // Swap arr[j] and arr[j+1]
+                [arr[j], arr[j + 1]] = [arr[j + 1], arr[j]];
+            }
+        }
+    }
+    return arr;
+}`);
+            const [emotion, setEmotion] = useState('sarcastic');
+            const [commentedCode, setCommentedCode] = useState('');
+            const [isLoading, setIsLoading] = useState(false);
+            const [error, setError] = useState(null);
+            const [apiKey, setApiKey] = useState('');
+
+            const emotions = [
+                { value: 'sarcastic', label: 'Sarcastic' },
+                { value: 'cheerful', label: 'Cheerful' },
+                { value: 'dramatic', label: 'Overly Dramatic' },
+                { value: 'grumpy', label: 'Grumpy Old Dev' },
+                { value: 'formal', label: 'Formal & Professional' },
+                { value: 'poetic', label: 'Poetic' },
+            ];
+
+            // --- Gemini API Call Logic ---
+            const generateComments = async (userCode, selectedEmotion) => {
+                if (!apiKey.trim()) {
+                    setError("Please enter your Gemini API key to proceed.");
+                    return;
+                }
+                
+                setIsLoading(true);
+                setError(null);
+                setCommentedCode('');
+
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+
+                const systemPrompt = `You are an expert code commenter. Your task is to add comments to the user's code block.
+You MUST adopt the following persona for all your comments: ${selectedEmotion}.
+- If the emotion is 'Sarcastic', be witty and slightly mocking.
+- If it is 'Cheerful', be encouraging and positive.
+- If it is 'Overly Dramatic', treat every line of code like a shocking plot twist in a soap opera.
+- If it is 'Grumpy Old Dev', complain about modern programming practices and how things were better in your day.
+- If it is 'Formal & Professional', write comments like you're documenting a corporate codebase.
+- If it is 'Poetic', write comments in the style of a poet.
+
+Do NOT change the original code. Only add comments. Return the complete, modified code block inside a single markdown code block.`;
+
+                const payload = {
+                    contents: [{
+                        parts: [{ text: `Here is the code:\n\n\`\`\`\n${userCode}\n\`\`\`` }]
+                    }],
+                    systemInstruction: {
+                        parts: [{ text: systemPrompt }]
+                    },
+                };
+
+                try {
+                    const response = await fetch(apiUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (!response.ok) {
+                        const errorBody = await response.json();
+                        throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error?.message || 'Unknown error'}`);
+                    }
+
+                    const result = await response.json();
+                    const candidate = result.candidates?.[0];
+
+                    if (candidate && candidate.content?.parts?.[0]?.text) {
+                        let text = candidate.content.parts[0].text;
+                        text = text.replace(/^```.*\n/, '').replace(/```$/, '');
+                        setCommentedCode(text);
+                    } else {
+                        throw new Error("Received an empty or invalid response from the API.");
+                    }
+
+                } catch (err) {
+                    console.error(err);
+                    setError(err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!code.trim()) {
+                    setError("Please enter some code to comment.");
+                    return;
+                }
+                generateComments(code, emotion);
+            };
+
+            return (
+                <div className="bg-gray-900 text-gray-100 min-h-screen font-sans p-4 sm:p-6 lg:p-8">
+                    <div className="max-w-7xl mx-auto">
+                        <header className="text-center mb-8">
+                            <h1 className="text-4xl sm:text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+                                Emotional Code Commenter
+                            </h1>
+                            <p className="text-gray-400 mt-2">Let AI comment your code with a spark of personality!</p>
+                        </header>
+                        
+                        <div className="mb-6 max-w-lg mx-auto">
+                            <label htmlFor="api-key" className="block text-sm font-medium text-gray-300 mb-2">
+                                Enter Your Gemini API Key
+                            </label>
+                            <input
+                                type="password"
+                                id="api-key"
+                                value={apiKey}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder="Your API key is required to use this tool"
+                                className="w-full bg-gray-800 border border-gray-600 rounded-lg p-3 font-mono text-sm text-gray-200 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                            />
+                            <p className="text-xs text-gray-500 mt-2">
+                                This tool requires a Google Gemini API key. You can get a free key from 
+                                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline"> Google AI Studio</a>.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div className="flex flex-col gap-6 p-6 bg-gray-800 border border-gray-700 rounded-2xl shadow-lg">
+                                <h2 className="text-2xl font-semibold text-gray-200">Your Code</h2>
+                                <form onSubmit={handleSubmit} className="flex flex-col gap-4 h-full">
+                                    <textarea
+                                        value={code}
+                                        onChange={(e) => setCode(e.target.value)}
+                                        placeholder="Paste your code here..."
+                                        className="w-full flex-grow bg-gray-900 border border-gray-600 rounded-lg p-4 font-mono text-sm text-gray-200 focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all resize-none"
+                                        spellCheck="false"
+                                    />
+                                    <div className="flex flex-col sm:flex-row gap-4">
+                                        <select
+                                            value={emotion}
+                                            onChange={(e) => setEmotion(e.target.value)}
+                                            className="w-full sm:w-1/2 bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-gray-200 focus:ring-2 focus:ring-purple-500 focus:outline-none"
+                                        >
+                                            {emotions.map(e => <option key={e.value} value={e.value}>{e.label}</option>)}
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            disabled={isLoading}
+                                            className="w-full sm:w-1/2 flex justify-center items-center px-6 py-3 font-bold text-white bg-gradient-to-r from-purple-600 to-pink-600 rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-300 transform hover:scale-105 shadow-md"
+                                        >
+                                            {isLoading ? (
+                                                <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            ) : (
+                                                'Generate Comments'
+                                            )}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <div className="flex flex-col gap-4 p-6 bg-gray-800 border border-gray-700 rounded-2xl shadow-lg">
+                                <h2 className="text-2xl font-semibold text-gray-200">AI-Generated Comments</h2>
+                                <div className="w-full h-[500px] lg:h-full bg-gray-900 border border-gray-600 rounded-lg p-4 overflow-auto">
+                                    {error && (
+                                        <div className="text-red-400 bg-red-900/50 p-4 rounded-lg">
+                                            <p className="font-bold">An error occurred:</p>
+                                            <p className="text-sm">{error}</p>
+                                        </div>
+                                    )}
+                                    {commentedCode ? (
+                                        <pre className="text-sm text-gray-200 whitespace-pre-wrap font-mono">
+                                            <code>{commentedCode}</code>
+                                        </pre>
+                                    ) : !isLoading && !error && (
+                                        <div className="flex items-center justify-center h-full text-gray-500">
+                                            Your commented code will appear here...
+                                        </div>
+                                    )}
+                                     {isLoading && (
+                                        <div className="flex items-center justify-center h-full text-gray-500">
+                                             <div className="flex flex-col items-center gap-4">
+                                                <svg className="animate-spin h-8 w-8 text-purple-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                                <p>Generating comments...</p>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const container = document.getElementById('root');
+        const root = ReactDOM.createRoot(container);
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
